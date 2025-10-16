@@ -1,0 +1,8 @@
+# Core dependencies
+pdf2image
+Pillow
+
+# Cloud service dependencies (install all for full functionality)
+google-cloud-vision
+azure-ai-vision-imageanalysis
+boto3
