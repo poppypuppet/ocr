@@ -1,8 +1,13 @@
 # Core dependencies
 pdf2image
 Pillow
+PyYAML
 
 # Cloud service dependencies (install all for full functionality)
 google-cloud-vision
 azure-ai-vision-imageanalysis
 boto3
+
+# Development dependencies
+black
+ruff

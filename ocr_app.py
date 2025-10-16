@@ -1,13 +1,13 @@
-
-import argparse
 import os
 from pdf2image import convert_from_path
-from PIL import Image
 import io
+import yaml
+
 
 # Helper function to check if a command exists
 def command_exists(cmd):
     return os.system(f"type {cmd} > /dev/null 2>&1") == 0
+
 
 # --- Google Cloud Vision ---
 def ocr_google(image_bytes):
@@ -24,6 +24,7 @@ def ocr_google(image_bytes):
     if texts:
         return texts[0].description
     return ""
+
 
 # --- Azure AI Vision ---
 def ocr_azure(image_bytes):
@@ -42,10 +43,13 @@ def ocr_azure(image_bytes):
 
     client = ImageAnalysisClient(endpoint=endpoint, credential=AzureKeyCredential(key))
     result = client.analyze(image_data=image_bytes, visual_features=["read"])
-    
+
     if result.read and result.read.blocks:
-        return "\n".join([line.text for block in result.read.blocks for line in block.lines])
+        return "\n".join(
+            [line.text for block in result.read.blocks for line in block.lines]
+        )
     return ""
+
 
 # --- AWS Textract ---
 def ocr_aws(image_bytes):
@@ -61,8 +65,8 @@ def ocr_aws(image_bytes):
     except Exception as e:
         return f"[Error] Failed to create AWS Textract client: {e}"
 
-    response = textract.detect_document_text(Document={'Bytes': image_bytes})
-    
+    response = textract.detect_document_text(Document={"Bytes": image_bytes})
+
     text = []
     for item in response["Blocks"]:
         if item["BlockType"] == "LINE":
@@ -88,7 +92,9 @@ def process_pdf(file_path, service):
     }
 
     if service not in ocr_functions:
-        print(f"Error: Service '{service}' is not supported. Choose from {list(ocr_functions.keys())}")
+        print(
+            f"Error: Service '{service}' is not supported. Choose from {list(ocr_functions.keys())}"
+        )
         return
 
     try:
@@ -100,7 +106,7 @@ def process_pdf(file_path, service):
     full_text = ""
     for i, image in enumerate(images):
         print(f"  - Processing page {i + 1}/{len(images)}...")
-        
+
         # Convert PIL image to bytes for the APIs
         with io.BytesIO() as output:
             image.save(output, format="PNG")
@@ -112,28 +118,43 @@ def process_pdf(file_path, service):
         except Exception as e:
             print(f"    [Error on page {i+1}] Could not process page. Error: {e}")
 
-
     print("\n--- Full Extracted Text ---")
     print(full_text)
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Extract text from an image-based PDF using cloud OCR services.")
-    parser.add_argument("--file", type=str, required=True, help="Path to the PDF file.")
-    parser.add_argument(
-        "--service",
-        type=str,
-        required=True,
-        choices=["google", "azure", "aws"],
-        help="The OCR service to use.",
-    )
-    args = parser.parse_args()
+def load_config(config_path="config.yaml"):
+    """Loads configuration from a YAML file."""
+    try:
+        with open(config_path, "r") as f:
+            config = yaml.safe_load(f)
+            if not config or "service" not in config or "pdf_file_path" not in config:
+                raise ValueError(
+                    "Config file must contain 'service' and 'pdf_file_path' keys."
+                )
+            return config
+    except FileNotFoundError:
+        print(f"[Error] Configuration file not found at {config_path}")
+        return None
+    except Exception as e:
+        print(f"[Error] Failed to read or parse config file: {e}")
+        return None
 
-    if not os.path.exists(args.file):
-        print(f"Error: File not found at {args.file}")
+
+def main():
+    """Main function to load config and process PDF."""
+    config = load_config()
+    if not config:
         return
 
-    process_pdf(args.file, args.service)
+    service = config.get("service")
+    file_path = config.get("pdf_file_path")
+
+    if not os.path.exists(file_path):
+        print(f"Error: File not found at {file_path}")
+        return
+
+    process_pdf(file_path, service)
+
 
 if __name__ == "__main__":
     main()

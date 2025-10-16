@@ -1,0 +1,8 @@
+# The OCR service to use. Options: "google", "azure", "aws"
+service: google
+
+# Path to the PDF file you want to process.
+# For reliability, it is strongly recommended to use an absolute path (e.g., /Users/wwzhang/Documents/doc.pdf).
+# A relative path might work, but it depends on where you run the script from.
+# IMPORTANT: Please change this to the actual path of your PDF file.
+pdf_file_path: /path/to/your/document.pdf
