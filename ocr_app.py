@@ -10,7 +10,7 @@ def command_exists(cmd):
 
 
 # --- Google Cloud Vision ---
-def ocr_google(image_bytes):
+def ocr_google(image_bytes, config):
     """Performs OCR using Google Cloud Vision API."""
     try:
         from google.cloud import vision
@@ -27,7 +27,7 @@ def ocr_google(image_bytes):
 
 
 # --- Azure AI Vision ---
-def ocr_azure(image_bytes):
+def ocr_azure(image_bytes, config):
     """Performs OCR using Azure AI Vision."""
     try:
         from azure.ai.vision.imageanalysis import ImageAnalysisClient
@@ -36,10 +36,10 @@ def ocr_azure(image_bytes):
         return "[Error] Azure AI Vision library not installed. Please run: pip install azure-ai-vision-imageanalysis"
 
     try:
-        endpoint = os.environ["AZURE_VISION_ENDPOINT"]
-        key = os.environ["AZURE_VISION_KEY"]
+        endpoint = config["azure_endpoint"]
+        key = config["azure_key"]
     except KeyError:
-        return "[Error] Please set AZURE_VISION_ENDPOINT and AZURE_VISION_KEY environment variables."
+        return "[Error] Please set azure_endpoint and azure_key in config.yaml."
 
     client = ImageAnalysisClient(endpoint=endpoint, credential=AzureKeyCredential(key))
     result = client.analyze(image_data=image_bytes, visual_features=["read"])
@@ -52,7 +52,7 @@ def ocr_azure(image_bytes):
 
 
 # --- AWS Textract ---
-def ocr_aws(image_bytes):
+def ocr_aws(image_bytes, config):
     """Performs OCR using AWS Textract."""
     try:
         import boto3
@@ -74,7 +74,36 @@ def ocr_aws(image_bytes):
     return "\n".join(text)
 
 
-def process_pdf(file_path, service):
+def process_pdf(file_path, service, config):
+    """
+    Converts a PDF to images and performs OCR on each page.
+    """
+    if not command_exists("pdftoppm"):
+        print("[Error] Poppler is not installed or not in your PATH.")
+        print("Please install it. On macOS with Homebrew: brew install poppler")
+        return
+
+    print(f"Processing {file_path} with {service}...")
+
+    ocr_functions = {
+        "google": ocr_google,
+        "azure": ocr_azure,
+        "aws": ocr_aws,
+    }
+
+    if service not in ocr_functions:
+        print(
+            f"Error: Service '{service}' is not supported. Choose from {list(ocr_functions.keys())}"
+        )
+        return
+
+    try:
+        images = convert_from_path(file_path)
+    except Exception as e:
+        print(f"Error converting PDF to images: {e}")
+        return
+
+def process_pdf(file_path, service, config):
     """
     Converts a PDF to images and performs OCR on each page.
     """
@@ -113,13 +142,25 @@ def process_pdf(file_path, service):
             image_bytes = output.getvalue()
 
         try:
-            text = ocr_functions[service](image_bytes)
-            full_text += f"--- Page {i + 1} ---\n{text}\n\n"
+            text = ocr_functions[service](image_bytes, config)
+            full_text += f"-------- Page {i + 1} --------\n{text}\n\n"
         except Exception as e:
             print(f"    [Error on page {i+1}] Could not process page. Error: {e}")
 
-    print("\n--- Full Extracted Text ---")
-    print(full_text)
+    output_file_path = config.get("output_file_path")
+
+    if output_file_path:
+        try:
+            with open(output_file_path, "w", encoding="utf-8") as f:
+                f.write(full_text)
+            print(f"\nOCR results saved to {output_file_path}")
+        except Exception as e:
+            print(f"\nError saving OCR results to file: {e}")
+            print("\n--- Full Extracted Text (printed to console due to file error) ---")
+            print(full_text)
+    else:
+        print("\n--- Full Extracted Text ---")
+        print(full_text)
 
 
 def load_config(config_path="config.yaml"):
@@ -129,8 +170,13 @@ def load_config(config_path="config.yaml"):
             config = yaml.safe_load(f)
             if not config or "service" not in config or "pdf_file_path" not in config:
                 raise ValueError(
-                    "Config file must contain 'service' and 'pdf_file_path' keys."
+                    "Config file must contain 'service' and 'pdf_file_path' keys. 'output_file_path' is optional."
                 )
+            if config["service"] == "azure":
+                if "azure_endpoint" not in config or "azure_key" not in config:
+                    raise ValueError(
+                        "Config file must contain 'azure_endpoint' and 'azure_key' keys when service is azure."
+                    )
             return config
     except FileNotFoundError:
         print(f"[Error] Configuration file not found at {config_path}")
@@ -153,7 +199,7 @@ def main():
         print(f"Error: File not found at {file_path}")
         return
 
-    process_pdf(file_path, service)
+    process_pdf(file_path, service, config)
 
 
 if __name__ == "__main__":
