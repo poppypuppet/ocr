@@ -3,7 +3,7 @@ from pdf2image import convert_from_path
 import io
 import yaml
 from datetime import datetime
-import argparse
+from ocr_services import get_ocr_service
 
 
 # Helper function to check if a command exists
@@ -11,84 +11,8 @@ def command_exists(cmd):
     return os.system(f"type {cmd} > /dev/null 2>&1") == 0
 
 
-# --- Google Cloud Vision ---
-def ocr_google(image_bytes, config):
-    """Performs OCR using Google Cloud Vision API."""
-    try:
-        from google.cloud import vision
-        from google.oauth2 import service_account
-    except ImportError:
-        logger.error("[Error] Google Cloud Vision library not installed. Please run: pip install google-cloud-vision")
-        return ""
 
-    credentials_path = config.get("google_credentials_path")
-    if credentials_path:
-        try:
-            credentials = service_account.Credentials.from_service_account_file(credentials_path)
-            client = vision.ImageAnnotatorClient(credentials=credentials)
-        except Exception as e:
-            logger.error(f"[Error] Failed to load Google Cloud credentials from {credentials_path}: {e}")
-            return ""
-    else:
-        client = vision.ImageAnnotatorClient()
-    image = vision.Image(content=image_bytes)
-    response = client.text_detection(image=image)
-    texts = response.text_annotations
-    if texts:
-        return texts[0].description
-    return ""
-
-
-# --- Azure AI Vision ---
-def ocr_azure(image_bytes, config):
-    """Performs OCR using Azure AI Vision."""
-    try:
-        from azure.ai.vision.imageanalysis import ImageAnalysisClient
-        from azure.core.credentials import AzureKeyCredential
-    except ImportError:
-        logger.error("[Error] Azure AI Vision library not installed. Please run: pip install azure-ai-vision-imageanalysis")
-        return ""
-
-    try:
-        endpoint = config["azure_endpoint"]
-        key = config["azure_key"]
-    except KeyError:
-        logger.error("[Error] Please set azure_endpoint and azure_key in config.yaml.")
-        return ""
-
-    client = ImageAnalysisClient(endpoint=endpoint, credential=AzureKeyCredential(key))
-    result = client.analyze(image_data=image_bytes, visual_features=["read"])
-
-    if result.read and result.read.blocks:
-        return "\n".join(
-            [line.text for block in result.read.blocks for line in block.lines]
-        )
-    return ""
-
-
-# --- AWS Textract ---
-def ocr_aws(image_bytes, config):
-    """Performs OCR using AWS Textract."""
-    try:
-        import boto3
-    except ImportError:
-        logger.error("[Error] AWS SDK for Python (boto3) not installed. Please run: pip install boto3")
-        return ""
-
-    try:
-        # It's recommended to configure region via ~/.aws/config or AWS_REGION env var
-        textract = boto3.client("textract")
-    except Exception as e:
-        logger.error(f"[Error] Failed to create AWS Textract client: {e}")
-        return ""
-
-    response = textract.detect_document_text(Document={"Bytes": image_bytes})
-
-    text = []
-    for item in response["Blocks"]:
-        if item["BlockType"] == "LINE":
-            text.append(item["Text"])
-    return "\n".join(text)
+from ocr_services import get_ocr_service
 
 def process_pdf(file_path, service, config):
     """
@@ -101,16 +25,10 @@ def process_pdf(file_path, service, config):
 
     logger.info(f"Processing {file_path} with {service}...")
 
-    ocr_functions = {
-        "google": ocr_google,
-        "azure": ocr_azure,
-        "aws": ocr_aws,
-    }
-
-    if service not in ocr_functions:
-        logger.error(
-            f"Error: Service '{service}' is not supported. Choose from {list(ocr_functions.keys())}"
-        )
+    try:
+        ocr_service = get_ocr_service(service, config)
+    except ValueError as e:
+        logger.error(f"Error: {e}")
         return
 
     try:
@@ -129,7 +47,7 @@ def process_pdf(file_path, service, config):
             image_bytes = output.getvalue()
 
         try:
-            text = ocr_functions[service](image_bytes, config)
+            text = ocr_service.ocr(image_bytes)
             full_text += f"-------- Page {i + 1} --------\n{text}\n\n"
         except Exception as e:
             logger.exception(f"    [Error on page {i+1}] Could not process page. Error: {e}")
@@ -163,16 +81,10 @@ def process_image(file_path, service, config):
     """
     logger.info(f"Processing {file_path} with {service}...")
 
-    ocr_functions = {
-        "google": ocr_google,
-        "azure": ocr_azure,
-        "aws": ocr_aws,
-    }
-
-    if service not in ocr_functions:
-        logger.error(
-            f"Error: Service '{service}' is not supported. Choose from {list(ocr_functions.keys())}"
-        )
+    try:
+        ocr_service = get_ocr_service(service, config)
+    except ValueError as e:
+        logger.error(f"Error: {e}")
         return
 
     try:
@@ -184,7 +96,7 @@ def process_image(file_path, service, config):
 
     full_text = ""
     try:
-        text = ocr_functions[service](image_bytes, config)
+        text = ocr_service.ocr(image_bytes)
         full_text += f"-------- Image OCR Result --------\n{text}\n\n"
     except Exception as e:
         logger.exception(f"    [Error processing image] Could not process image. Error: {e}")
