@@ -1,5 +1,5 @@
 # The OCR service to use. Options: "google", "azure", "aws"
-service: azure
+service: google
 
 # Azure AI Vision credentials (only required if service is 'azure')
 azure_endpoint: "https://wz-computer-vision.cognitiveservices.azure.com/"
@@ -15,3 +15,6 @@ pdf_file_path: /Users/wwzhang/Downloads/riji.pdf
 # If not specified, results will be printed to the console.
 # Example: output_file_path: /Users/wwzhang/Documents/ocr_results.md
 output_file_path: /Users/wwzhang/Downloads/ocr_results.md
+
+# Optional: Path to Google Cloud service account key file (only required if service is 'google' and not using Application Default Credentials).
+google_credentials_path: leafy-pilot-475823-j8-0f86bd078e30.json

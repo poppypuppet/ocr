@@ -2,6 +2,7 @@ import os
 from pdf2image import convert_from_path
 import io
 import yaml
+from datetime import datetime
 
 
 # Helper function to check if a command exists
@@ -14,10 +15,19 @@ def ocr_google(image_bytes, config):
     """Performs OCR using Google Cloud Vision API."""
     try:
         from google.cloud import vision
+        from google.oauth2 import service_account
     except ImportError:
         return "[Error] Google Cloud Vision library not installed. Please run: pip install google-cloud-vision"
 
-    client = vision.ImageAnnotatorClient()
+    credentials_path = config.get("google_credentials_path")
+    if credentials_path:
+        try:
+            credentials = service_account.Credentials.from_service_account_file(credentials_path)
+            client = vision.ImageAnnotatorClient(credentials=credentials)
+        except Exception as e:
+            return f"[Error] Failed to load Google Cloud credentials from {credentials_path}: {e}"
+    else:
+        client = vision.ImageAnnotatorClient()
     image = vision.Image(content=image_bytes)
     response = client.text_detection(image=image)
     texts = response.text_annotations
@@ -73,36 +83,6 @@ def ocr_aws(image_bytes, config):
             text.append(item["Text"])
     return "\n".join(text)
 
-
-def process_pdf(file_path, service, config):
-    """
-    Converts a PDF to images and performs OCR on each page.
-    """
-    if not command_exists("pdftoppm"):
-        print("[Error] Poppler is not installed or not in your PATH.")
-        print("Please install it. On macOS with Homebrew: brew install poppler")
-        return
-
-    print(f"Processing {file_path} with {service}...")
-
-    ocr_functions = {
-        "google": ocr_google,
-        "azure": ocr_azure,
-        "aws": ocr_aws,
-    }
-
-    if service not in ocr_functions:
-        print(
-            f"Error: Service '{service}' is not supported. Choose from {list(ocr_functions.keys())}"
-        )
-        return
-
-    try:
-        images = convert_from_path(file_path)
-    except Exception as e:
-        print(f"Error converting PDF to images: {e}")
-        return
-
 def process_pdf(file_path, service, config):
     """
     Converts a PDF to images and performs OCR on each page.
@@ -151,9 +131,14 @@ def process_pdf(file_path, service, config):
 
     if output_file_path:
         try:
-            with open(output_file_path, "w", encoding="utf-8") as f:
+            # Add timestamp to the output filename
+            base, ext = os.path.splitext(output_file_path)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            timestamped_output_file_path = f"{base}_{timestamp}{ext}"
+
+            with open(timestamped_output_file_path, "w", encoding="utf-8") as f:
                 f.write(full_text)
-            print(f"\nOCR results saved to {output_file_path}")
+            print(f"\nOCR results saved to {timestamped_output_file_path}")
         except Exception as e:
             print(f"\nError saving OCR results to file: {e}")
             print("\n--- Full Extracted Text (printed to console due to file error) ---")
@@ -177,6 +162,9 @@ def load_config(config_path="config.yaml"):
                     raise ValueError(
                         "Config file must contain 'azure_endpoint' and 'azure_key' keys when service is azure."
                     )
+            elif config["service"] == "google":
+                if "google_credentials_path" not in config:
+                    print("Warning: google_credentials_path not found in config.yaml. Attempting to use Application Default Credentials.")
             return config
     except FileNotFoundError:
         print(f"[Error] Configuration file not found at {config_path}")

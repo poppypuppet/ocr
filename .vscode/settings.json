@@ -5,5 +5,10 @@
     },
     "editor.codeActionsOnSave": {
         "source.fixAll.ruff": "explicit"
-    }
+    },
+    "editor.fontFamily": "'Anonymous Pro'",
+    "editor.fontSize": 15,
+    "editor.formatOnSave": true,
+    "terminal.integrated.fontFamily": "",
+    "terminal.integrated.fontSize": 15
 }
