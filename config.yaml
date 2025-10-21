@@ -10,5 +10,10 @@ azure_key: "YOUR_AZURE_KEY"
 # Example: output_file_path: /Users/wwzhang/Documents/output_ocr/
 output_file_path: 
 
+# Logging options
+log_enabled: true
+# Optional: Path to the directory where log files will be saved.
+# If not specified, logs will be saved in the same directory as the OCR results.
+log_directory:
 # Optional: Path to Google Cloud service account key file (only required if service is 'google' and not using Application Default Credentials).
 google_credentials_path: leafy-pilot-475823-j8-0f86bd078e30.json
