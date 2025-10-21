@@ -248,11 +248,21 @@ import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+# Console Application Call Examples:
+#
+# To process a single file:
+# python ocr_app.py -f /path/to/your/document.pdf
+# python ocr_app.py --file /path/to/your/image.png
+#
+# To process all supported files in a folder:
+# python ocr_app.py -fd /path/to/your/folder
+# python ocr_app.py --file_folder /path/to/your/another_folder
+
 def main():
     """Main function to load config and process PDF/image."""
     parser = argparse.ArgumentParser(description="Process PDF or image files with OCR.")
-    parser.add_argument("file_path", nargs='?', type=str, help="Path to the input PDF or image file.")
-    parser.add_argument("-f", "--folder", type=str, help="Path to a folder containing PDF or image files to process.")
+    parser.add_argument("-f", "--file", type=str, help="Path to the input PDF or image file.")
+    parser.add_argument("-fd", "--file_folder", type=str, help="Path to a folder containing PDF or image files to process.")
     args = parser.parse_args()
 
     config = load_config()
@@ -285,11 +295,11 @@ def main():
 
     service = config.get("service")
 
-    if args.file_path and args.folder:
-        logger.error("Error: Please specify either a single file_path or a --folder, but not both.")
+    if args.file and args.file_folder:
+        logger.error("Error: Please specify either a single --file or a --file_folder, but not both.")
         return
-    elif args.file_path:
-        input_path = args.file_path
+    elif args.file:
+        input_path = args.file
         if not os.path.exists(input_path):
             logger.error(f"Error: File not found at {input_path}")
             return
@@ -302,8 +312,8 @@ def main():
             process_image(input_path, service, config)
         else:
             logger.error(f"Error: Unsupported file type '{file_extension}'. Only PDF and image files are supported.")
-    elif args.folder:
-        folder_path = args.folder
+    elif args.file_folder:
+        folder_path = args.file_folder
         if not os.path.isdir(folder_path):
             logger.error(f"Error: Folder not found at {folder_path}")
             return
