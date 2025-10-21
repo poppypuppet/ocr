@@ -5,16 +5,10 @@ service: google
 azure_endpoint: "https://wz-computer-vision.cognitiveservices.azure.com/"
 azure_key: "YOUR_AZURE_KEY"
 
-# Path to the PDF file you want to process.
-# For reliability, it is strongly recommended to use an absolute path (e.g., /Users/wwzhang/Documents/doc.pdf).
-# A relative path might work, but it depends on where you run the script from.
-# IMPORTANT: Please change this to the actual path of your PDF file.
-pdf_file_path: /Users/wwzhang/Downloads/riji.pdf
-
-# Optional: Path to the output file where OCR results will be saved.
-# If not specified, results will be printed to the console.
-# Example: output_file_path: /Users/wwzhang/Documents/ocr_results.md
-output_file_path: /Users/wwzhang/Downloads/ocr_results.md
+# Optional: Path to the output directory where OCR results will be saved.
+# If not specified, results will be saved in the same directory as the input PDF.
+# Example: output_file_path: /Users/wwzhang/Documents/output_ocr/
+output_file_path: 
 
 # Optional: Path to Google Cloud service account key file (only required if service is 'google' and not using Application Default Credentials).
 google_credentials_path: leafy-pilot-475823-j8-0f86bd078e30.json

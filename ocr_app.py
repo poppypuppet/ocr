@@ -3,6 +3,7 @@ from pdf2image import convert_from_path
 import io
 import yaml
 from datetime import datetime
+import argparse
 
 
 # Helper function to check if a command exists
@@ -129,16 +130,76 @@ def process_pdf(file_path, service, config):
 
     output_file_path = config.get("output_file_path")
 
-    if output_file_path:
-        try:
-            # Add timestamp to the output filename
-            base, ext = os.path.splitext(output_file_path)
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            timestamped_output_file_path = f"{base}_{timestamp}{ext}"
+    output_dir = os.path.dirname(file_path) if not config.get("output_file_path") else config.get("output_file_path")
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
 
-            with open(timestamped_output_file_path, "w", encoding="utf-8") as f:
+    # Derive output filename from input PDF name and timestamp
+    pdf_base_name = os.path.splitext(os.path.basename(file_path))[0]
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_filename = f"{pdf_base_name}_{timestamp}.md"
+    final_output_path = os.path.join(output_dir, output_filename)
+
+    if final_output_path:
+        try:
+            with open(final_output_path, "w", encoding="utf-8") as f:
                 f.write(full_text)
-            print(f"\nOCR results saved to {timestamped_output_file_path}")
+            print(f"\nOCR results saved to {final_output_path}")
+        except Exception as e:
+            print(f"\nError saving OCR results to file: {e}")
+            print("\n--- Full Extracted Text (printed to console due to file error) ---")
+            print(full_text)
+    else:
+        print("\n--- Full Extracted Text ---")
+        print(full_text)
+
+def process_image(file_path, service, config):
+    """
+    Performs OCR on a single image file.
+    """
+    print(f"Processing {file_path} with {service}...")
+
+    ocr_functions = {
+        "google": ocr_google,
+        "azure": ocr_azure,
+        "aws": ocr_aws,
+    }
+
+    if service not in ocr_functions:
+        print(
+            f"Error: Service '{service}' is not supported. Choose from {list(ocr_functions.keys())}"
+        )
+        return
+
+    try:
+        with open(file_path, "rb") as f:
+            image_bytes = f.read()
+    except Exception as e:
+        print(f"Error reading image file: {e}")
+        return
+
+    full_text = ""
+    try:
+        text = ocr_functions[service](image_bytes, config)
+        full_text += f"-------- Image OCR Result --------\n{text}\n\n"
+    except Exception as e:
+        print(f"    [Error processing image] Could not process image. Error: {e}")
+
+    output_dir = os.path.dirname(file_path) if not config.get("output_file_path") else config.get("output_file_path")
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    # Derive output filename from input image name and timestamp
+    image_base_name = os.path.splitext(os.path.basename(file_path))[0]
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_filename = f"{image_base_name}_{timestamp}.md"
+    final_output_path = os.path.join(output_dir, output_filename)
+
+    if final_output_path:
+        try:
+            with open(final_output_path, "w", encoding="utf-8") as f:
+                f.write(full_text)
+            print(f"\nOCR results saved to {final_output_path}")
         except Exception as e:
             print(f"\nError saving OCR results to file: {e}")
             print("\n--- Full Extracted Text (printed to console due to file error) ---")
@@ -153,9 +214,9 @@ def load_config(config_path="config.yaml"):
     try:
         with open(config_path, "r") as f:
             config = yaml.safe_load(f)
-            if not config or "service" not in config or "pdf_file_path" not in config:
+            if not config or "service" not in config:
                 raise ValueError(
-                    "Config file must contain 'service' and 'pdf_file_path' keys. 'output_file_path' is optional."
+                    "Config file must contain 'service' key. 'output_file_path' is optional."
                 )
             if config["service"] == "azure":
                 if "azure_endpoint" not in config or "azure_key" not in config:
@@ -175,19 +236,30 @@ def load_config(config_path="config.yaml"):
 
 
 def main():
-    """Main function to load config and process PDF."""
+    """Main function to load config and process PDF/image."""
+    parser = argparse.ArgumentParser(description="Process PDF or image files with OCR.")
+    parser.add_argument("file_path", type=str, help="Path to the input PDF or image file.")
+    args = parser.parse_args()
+
     config = load_config()
     if not config:
         return
 
     service = config.get("service")
-    file_path = config.get("pdf_file_path")
+    input_file_path = args.file_path
 
-    if not os.path.exists(file_path):
-        print(f"Error: File not found at {file_path}")
+    if not os.path.exists(input_file_path):
+        print(f"Error: File not found at {input_file_path}")
         return
 
-    process_pdf(file_path, service, config)
+    file_extension = os.path.splitext(input_file_path)[1].lower()
+
+    if file_extension == ".pdf":
+        process_pdf(input_file_path, service, config)
+    elif file_extension in [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".webp"]:
+        process_image(input_file_path, service, config)
+    else:
+        print(f"Error: Unsupported file type '{file_extension}'. Only PDF and image files are supported.")
 
 
 if __name__ == "__main__":
