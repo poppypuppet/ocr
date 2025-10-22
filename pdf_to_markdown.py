@@ -3,7 +3,9 @@ import argparse
 from datetime import datetime
 import os
 
-def pdf_to_markdown(pdf_path, output_path, title_recognize, color_recognize):
+import re
+
+def pdf_to_markdown(pdf_path, output_path, title_recognize, color_recognize, header_regex, footer_regex):
     """
     Converts a text-based PDF to a Markdown file, preserving headings and text styles.
     """
@@ -27,6 +29,12 @@ def pdf_to_markdown(pdf_path, output_path, title_recognize, color_recognize):
                         lines.append(current_line)
                         current_line = [char]
                 lines.append(current_line)
+
+            # Filter out headers and footers
+            if header_regex:
+                lines = [line for line in lines if not re.match(header_regex, "".join([char["text"] for char in line]).strip())]
+            if footer_regex:
+                lines = [line for line in lines if not re.match(footer_regex, "".join([char["text"] for char in line]).strip())]
 
             # First pass: Analyze lines and create line objects
             line_objects = []
@@ -128,6 +136,8 @@ def main():
     parser.add_argument("-f", "--file", type=str, required=True, help="Path to the input PDF file.")
     parser.add_argument("-tr", "--title_recognize", action="store_true", help="Enable title recognition.")
     parser.add_argument("-cr", "--color_recognize", action="store_true", help="Enable color and style recognition.")
+    parser.add_argument("--header_regex", type=str, help="Regular expression to identify and remove headers.")
+    parser.add_argument("--footer_regex", type=str, help="Regular expression to identify and remove footers.")
     args = parser.parse_args()
 
     pdf_path = args.file
@@ -142,7 +152,7 @@ def main():
     output_dir = os.path.dirname(pdf_path)
     output_path = os.path.join(output_dir, output_filename)
 
-    pdf_to_markdown(pdf_path, output_path, args.title_recognize, args.color_recognize)
+    pdf_to_markdown(pdf_path, output_path, args.title_recognize, args.color_recognize, args.header_regex, args.footer_regex)
 
 if __name__ == "__main__":
     main()
