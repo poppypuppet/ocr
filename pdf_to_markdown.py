@@ -3,58 +3,122 @@ import argparse
 from datetime import datetime
 import os
 
-def pdf_to_markdown(pdf_path, output_path):
+def pdf_to_markdown(pdf_path, output_path, title_recognize, color_recognize):
     """
-    Converts a text-based PDF to a Markdown file, preserving headings.
+    Converts a text-based PDF to a Markdown file, preserving headings and text styles.
     """
     with pdfplumber.open(pdf_path) as pdf:
         markdown_content = ""
-        all_words = []
-        # First pass to collect all words and identify font sizes and their frequencies
-        font_sizes = {}
         for page in pdf.pages:
-            words_on_page = page.extract_words()
-            all_words.extend(words_on_page)
-            for obj in words_on_page:
-                if "size" in obj:
-                    size = round(obj["size"])
-                    if size in font_sizes:
-                        font_sizes[size] += 1
+            markdown_content += f"\n\n<!-- Page {page.page_number} -->\n\n"
+            
+            # Sort characters by vertical position, then horizontal
+            sorted_chars = sorted(page.chars, key=lambda c: (c["top"], c["x0"]))
+
+            # Group characters into lines with a dynamic tolerance
+            lines = []
+            if sorted_chars:
+                current_line = [sorted_chars[0]]
+                for char in sorted_chars[1:]:
+                    tolerance = current_line[-1]["size"] * 0.2
+                    if abs(char["top"] - current_line[-1]["top"]) < tolerance:
+                        current_line.append(char)
                     else:
-                        font_sizes[size] = 1
+                        lines.append(current_line)
+                        current_line = [char]
+                lines.append(current_line)
 
-        if not font_sizes:
-            print("No font size information found in structured text, falling back to plain text extraction.")
-            for page in pdf.pages:
-                text = page.extract_text()
-                if text:
-                    markdown_content += text + "\n"
-        else:
-            # Identify heading sizes based on frequency
-            sorted_sizes = sorted(font_sizes.items(), key=lambda item: item[1], reverse=True)
-            body_size = sorted_sizes[0][0]
-            heading_sizes = sorted([size for size, freq in font_sizes.items() if size > body_size], reverse=True)
+            # First pass: Analyze lines and create line objects
+            line_objects = []
+            for line in lines:
+                line_text = ""
+                is_heading = False
+                heading_level = 0
+                line_color = None
 
-            heading_levels = {size: i + 1 for i, size in enumerate(heading_sizes)}
+                styled_chars = {}
+                for char in line:
+                    fontname = char.get("fontname", "").lower()
+                    size = round(char.get("size", 0))
+                    color = char.get("non_stroking_color", (0, 0, 0))
+                    style = (fontname, size, color)
+                    if style not in styled_chars:
+                        styled_chars[style] = []
+                    styled_chars[style].append(char["text"])
 
-            # Second pass to generate Markdown
-            current_page_number = 0
-            for obj in all_words:
-                if obj["page_number"] != current_page_number:
-                    markdown_content += f"\n\n<!-- Page {obj["page_number"]} -->\n\n"
-                    current_page_number = obj["page_number"]
+                if title_recognize and len(styled_chars) == 1:
+                    fontname, size, color = list(styled_chars.keys())[0]
+                    if "bold" in fontname and size > 14:
+                        is_heading = True
+                        heading_level = 1 if size > 18 else 2
+                        line_color = color
 
-                text = obj["text"]
-                if "size" in obj and obj["size"] in heading_levels:
-                    level = heading_levels[obj["size"]]
-                    markdown_content += f"{ '#' * level} {text} "
+                for style, texts in styled_chars.items():
+                    text = "".join(texts)
+                    if color_recognize:
+                        fontname, size, color = style
+                        is_bold = "bold" in fontname
+                        is_italic = "italic" in fontname or "oblique" in fontname
+                        if is_bold:
+                            text = f"**{text}**"
+                        if is_italic:
+                            text = f"*{text}*"
+                        if color != (0, 0, 0):
+                            hex_color = f"#{int(color[0]*255):02x}{int(color[1]*255):02x}{int(color[2]*255):02x}"
+                            text = f'<font color="{hex_color}">{text}</font>'
+                    line_text += text
+                
+                line_objects.append({
+                    "text": line_text,
+                    "is_heading": is_heading,
+                    "heading_level": heading_level,
+                    "color": line_color
+                })
+
+            # Second pass: Merge consecutive titles
+            merged_lines = []
+            i = 0
+            while i < len(line_objects):
+                current_line = line_objects[i]
+                if title_recognize and current_line["is_heading"] and i + 1 < len(line_objects):
+                    next_line = line_objects[i+1]
+                    if (
+                        next_line["is_heading"]
+                        and current_line["heading_level"] == next_line["heading_level"]
+                        and current_line["color"] == next_line["color"]
+                    ):
+                        current_line["text"] += " " + next_line["text"]
+                        i += 1  # Skip the next line as it has been merged
+                merged_lines.append(current_line)
+                i += 1
+
+            # Final pass: Generate Markdown
+            for line in merged_lines:
+                if title_recognize and line["is_heading"]:
+                    markdown_content += f"{'#' * line['heading_level']} {line['text']}\n"
                 else:
-                    markdown_content += f"{text} "
-            markdown_content += "\n"
+                    markdown_content += line["text"] + "\n"
 
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(markdown_content)
     print(f"Successfully converted {pdf_path} to {output_path}")
+
+# Console Application Call Examples:
+#
+# To convert a PDF to Markdown with basic text extraction (no title or style recognition):
+# python pdf_to_markdown.py -f /path/to/your/document.pdf
+#
+# To convert a PDF to Markdown with title recognition enabled:
+# python pdf_to_markdown.py -f /path/to/your/document.pdf -tr
+# python pdf_to_markdown.py -f /path/to/your/document.pdf --title_recognize
+#
+# To convert a PDF to Markdown with color and style (bold/italic) recognition enabled:
+# python pdf_to_markdown.py -f /path/to/your/document.pdf -cr
+# python pdf_to_markdown.py -f /path/to/your/document.pdf --color_recognize
+#
+# To convert a PDF to Markdown with both title and color/style recognition enabled:
+# python pdf_to_markdown.py -f /path/to/your/document.pdf -tr -cr
+# python pdf_to_markdown.py -f /path/to/your/document.pdf --title_recognize --color_recognize
 
 def main():
     """
@@ -62,6 +126,8 @@ def main():
     """
     parser = argparse.ArgumentParser(description="Convert a text-based PDF to a Markdown file.")
     parser.add_argument("-f", "--file", type=str, required=True, help="Path to the input PDF file.")
+    parser.add_argument("-tr", "--title_recognize", action="store_true", help="Enable title recognition.")
+    parser.add_argument("-cr", "--color_recognize", action="store_true", help="Enable color and style recognition.")
     args = parser.parse_args()
 
     pdf_path = args.file
@@ -76,7 +142,7 @@ def main():
     output_dir = os.path.dirname(pdf_path)
     output_path = os.path.join(output_dir, output_filename)
 
-    pdf_to_markdown(pdf_path, output_path)
+    pdf_to_markdown(pdf_path, output_path, args.title_recognize, args.color_recognize)
 
 if __name__ == "__main__":
     main()
