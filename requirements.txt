@@ -2,6 +2,8 @@
 pdf2image
 Pillow
 PyYAML
+pdfplumber
+pdfplumber
 
 # Cloud service dependencies (install all for full functionality)
 google-cloud-vision
