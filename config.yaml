@@ -1,0 +1,20 @@
+# The OCR service to use. Options: "google", "azure", "aws"
+service: google
+
+# Optional: Path to Azure credentials file (only required if service is 'azure').
+azure_credentials_path: credentials/azure_credentials.json
+
+# Optional: Path to the output directory where OCR results will be saved.
+# If not specified, results will be saved in the same directory as the input PDF.
+# Example: output_file_path: /Users/wwzhang/Documents/output_ocr/
+output_file_path: 
+output/
+
+# Logging options
+log_enabled: true
+# Optional: Path to the directory where log files will be saved.
+# If not specified, logs will be saved in the same directory as the OCR results.
+log_directory:
+logs/
+# Optional: Path to Google Cloud service account key file (only required if service is 'google' and not using Application Default Credentials).
+google_credentials_path: credentials/leafy-pilot-475823-j8-0f86bd078e30.json
